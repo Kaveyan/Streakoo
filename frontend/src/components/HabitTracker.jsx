@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { storage } from "../api/storage";
 import { useAuth } from "../context/AuthContext";
@@ -57,6 +57,14 @@ const mix = (hex, ratio, bg) => {
 const scaleFor = (hex, bg) => [mix(hex, 0.25, bg), mix(hex, 0.5, bg), mix(hex, 0.75, bg), mix(hex, 1, bg)];
 
 const STORAGE_KEY = "habit-tracker-data";
+const DEFAULT_TIMER_SECONDS = 25 * 60;
+const MAX_TIMER_SECONDS = 99 * 3600 + 59 * 60 + 59;
+const clampTimer = (secs) => Math.min(MAX_TIMER_SECONDS, Math.max(0, secs));
+const splitDuration = (secs) => ({
+  hours: Math.floor(secs / 3600),
+  mins: Math.floor((secs % 3600) / 60),
+  secs: secs % 60,
+});
 
 export default function HabitTracker() {
   const [habits, setHabits] = useState([]);
@@ -97,6 +105,11 @@ export default function HabitTracker() {
   const [draggedTask, setDraggedTask] = useState(null);
   const [draggedGoalBudgetId, setDraggedGoalBudgetId] = useState(null);
   const [now, setNow] = useState(new Date());
+  const [timerDuration, setTimerDuration] = useState(DEFAULT_TIMER_SECONDS);
+  const [timerRemaining, setTimerRemaining] = useState(DEFAULT_TIMER_SECONDS);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const timerDeadlineRef = useRef(null);
+  const timerDisplayRef = useRef(null);
   const { logout } = useAuth();
 
   const handleLogout = async () => {
@@ -111,6 +124,35 @@ export default function HabitTracker() {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!timerRunning) {
+      timerDeadlineRef.current = null;
+      return undefined;
+    }
+    timerDeadlineRef.current = Date.now() + timerRemaining * 1000;
+    const id = setInterval(() => {
+      const left = Math.max(0, Math.round((timerDeadlineRef.current - Date.now()) / 1000));
+      setTimerRemaining(left);
+      if (left === 0) setTimerRunning(false);
+    }, 250);
+    return () => clearInterval(id);
+    // timerRemaining is intentionally omitted: the deadline is captured on start/resume
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerRunning]);
+
+  const toggleTimer = () => {
+    if (!timerRunning && timerRemaining === 0) {
+      setTimerRemaining(timerDuration);
+      if (timerDuration === 0) return;
+    }
+    setTimerRunning((v) => !v);
+  };
+
+  const resetTimer = () => {
+    setTimerRunning(false);
+    setTimerRemaining(timerDuration);
+  };
 
   const daysLeftInYear = useMemo(() => {
     const t = todayISO();
@@ -202,6 +244,9 @@ export default function HabitTracker() {
       setMonthTasks(data.monthTasks || []);
       setGoalBudgetItems(data.goalBudgetItems || []);
       setBucketListItems(data.bucketListItems || []);
+      const savedTimer = clampTimer(Number(data.timerDuration) || DEFAULT_TIMER_SECONDS);
+      setTimerDuration(savedTimer);
+      setTimerRemaining(savedTimer);
 
       setLoaded(true);
     })();
@@ -217,6 +262,32 @@ export default function HabitTracker() {
       console.error("save failed", e);
     }
   }, []);
+
+  const adjustTimer = useCallback(
+    (unitSeconds, direction) => {
+      if (timerRunning) return;
+      const next = clampTimer(timerRemaining + unitSeconds * direction);
+      setTimerRemaining(next);
+      setTimerDuration(next);
+      save({ timerDuration: next });
+    },
+    [timerRunning, timerRemaining, save]
+  );
+
+  // Wheel is registered as a passive listener by React, so it is bound manually
+  // to keep the page from scrolling while a timer segment is being adjusted.
+  useEffect(() => {
+    const el = timerDisplayRef.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      const segment = e.target.closest?.("[data-timer-unit]");
+      if (!segment) return;
+      e.preventDefault();
+      adjustTimer(Number(segment.dataset.timerUnit), e.deltaY < 0 ? 1 : -1);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [adjustTimer, loaded, activePage, habits.length]);
 
   const isCleanupTime = useCallback(() => {
     const now = new Date();
@@ -506,22 +577,8 @@ export default function HabitTracker() {
 
   const dayCompletionCount = (iso) => habits.reduce((acc, h) => acc + (completionSets[h.id]?.has(iso) ? 1 : 0), 0);
 
-  const singleHabitLongestStreak = (habitId) => {
-    const set = completionSets[habitId];
-    if (!set || set.size === 0) return 0;
-    const sorted = Array.from(set).sort();
-    let longest = 0, run = 0, prev = null;
-    sorted.forEach((d) => {
-      if (prev && addDays(prev, 1) === d) run++;
-      else run = 1;
-      longest = Math.max(longest, run);
-      prev = d;
-    });
-    return longest;
-  };
-
-  const { currentStreak, longestStreak } = useMemo(() => {
-    if (habits.length === 0) return { currentStreak: 0, longestStreak: 0 };
+  const currentStreak = useMemo(() => {
+    if (habits.length === 0) return 0;
     const allDone = (iso) => habits.every((h) => completionSets[h.id]?.has(iso));
     let current = 0;
     let cursor = todayISO();
@@ -530,22 +587,8 @@ export default function HabitTracker() {
       current++;
       cursor = addDays(cursor, -1);
     }
-    const allDates = new Set();
-    habits.forEach((h) => (completions[h.id] || []).forEach((d) => allDates.add(d)));
-    let longest = 0, run = 0, prev = null;
-    Array.from(allDates).sort().forEach((d) => {
-      if (allDone(d)) {
-        if (prev && addDays(prev, 1) === d) run++;
-        else run = 1;
-        longest = Math.max(longest, run);
-        prev = d;
-      } else {
-        prev = d;
-        run = 0;
-      }
-    });
-    return { currentStreak: current, longestStreak: Math.max(longest, current) };
-  }, [habits, completions, completionSets]);
+    return current;
+  }, [habits, completionSets]);
 
   const todayProgress = useMemo(() => {
     if (habits.length === 0) return 0;
@@ -594,7 +637,7 @@ export default function HabitTracker() {
 
   const hoveredHabit = habits.find((h) => h.id === hoveredHabitId) || null;
   const currentStreakDisplay = hoveredHabit ? habitStreak(hoveredHabit.id) : currentStreak;
-  const longestStreakDisplay = hoveredHabit ? singleHabitLongestStreak(hoveredHabit.id) : longestStreak;
+  const timerParts = splitDuration(timerRemaining);
 
   const donutData = useMemo(
     () => habits.map((h) => ({ name: h.name, value: (completions[h.id] || []).length, color: h.color })).filter((d) => d.value > 0),
@@ -1149,8 +1192,63 @@ export default function HabitTracker() {
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: "24px", fontWeight: 600 }}>{currentStreakDisplay}d</div>
             </div>
             <div className="ht-card" style={{ padding: "1rem" }}>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>{hoveredHabit ? `Longest streak — ${hoveredHabit.name}` : "Longest streak"}</div>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "24px", fontWeight: 600 }}>{longestStreakDisplay}d</div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Timer</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+                <div
+                  ref={timerDisplayRef}
+                  style={{ fontFamily: "'Fraunces', serif", fontSize: "24px", fontWeight: 600, display: "flex", alignItems: "baseline", userSelect: "none" }}
+                  title={timerRunning ? "Stop the timer to change it" : "Scroll over hours, minutes or seconds to set the timer"}
+                >
+                  {[
+                    ["hours", 3600, timerParts.hours],
+                    ["minutes", 60, timerParts.mins],
+                    ["seconds", 1, timerParts.secs],
+                  ].map(([label, unit, value], i) => (
+                    <span key={label} style={{ display: "flex", alignItems: "baseline" }}>
+                      {i > 0 && <span style={{ padding: "0 2px" }}>:</span>}
+                      <span
+                        role="spinbutton"
+                        tabIndex={0}
+                        aria-label={`Timer ${label}`}
+                        aria-valuenow={value}
+                        data-timer-unit={unit}
+                        onKeyDown={(e) => {
+                          if (e.key === "ArrowUp") { e.preventDefault(); adjustTimer(unit, 1); }
+                          if (e.key === "ArrowDown") { e.preventDefault(); adjustTimer(unit, -1); }
+                        }}
+                        style={{
+                          padding: "0 3px", borderRadius: "5px", cursor: timerRunning ? "default" : "ns-resize",
+                          background: timerRunning ? "transparent" : "var(--subtle-bg)",
+                        }}
+                      >
+                        {pad2(value)}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    onClick={toggleTimer}
+                    aria-label={timerRunning ? "Stop timer" : "Start timer"}
+                    style={{
+                      border: "1px solid var(--border-strong)", background: "var(--card-bg)", color: "var(--text)",
+                      borderRadius: "6px", padding: "4px 10px", fontSize: "12px", cursor: "pointer",
+                    }}
+                  >
+                    {timerRunning ? "Stop" : "Start"}
+                  </button>
+                  <button
+                    onClick={resetTimer}
+                    aria-label="Reset timer"
+                    style={{
+                      border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)",
+                      borderRadius: "6px", padding: "4px 10px", fontSize: "12px", cursor: "pointer",
+                    }}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
