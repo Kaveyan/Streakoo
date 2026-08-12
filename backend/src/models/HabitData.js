@@ -29,6 +29,12 @@ const HabitDataSchema = new mongoose.Schema(
     theme: { type: String, default: "light" },
     countdownMode: { type: String, default: "month" },
     dob: { type: String, default: null },
+
+    moneyTarget: { type: Number, default: 0 },
+    moneyEarned: { type: Number, default: 0 },
+    checkedProTips: { type: Array, default: [] },
+    proTips: { type: Array, default: [] },
+    timerSeconds: { type: Number, default: 1500 },
   },
   { timestamps: true, minimize: false }
 );

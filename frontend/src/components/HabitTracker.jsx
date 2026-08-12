@@ -74,6 +74,25 @@ export default function HabitTracker() {
   const [monthTasks, setMonthTasks] = useState([]);
   const [goalBudgetItems, setGoalBudgetItems] = useState([]);
   const [bucketListItems, setBucketListItems] = useState([]);
+  const [checkedProTips, setCheckedProTips] = useState([]);
+  const [proTips, setProTips] = useState([
+    "Travel as much as possible",
+    "Communication Skills",
+    "Fitness as a Mindset",
+    "Live in a Big City",
+    "Meet new people",
+    "Sleeping Maxxing",
+    "Learn to live alone",
+    "Read Books",
+    "Be Shameless in asking",
+    "Learn to ace the first impression",
+    "Write and Journal your thoughts",
+    "Multiple Sources of Income",
+    "Use Twitter (X) Everyday",
+    "Replace Reels with Substack",
+    "Do deep work"
+  ]);
+  const [draggedProTipIndex, setDraggedProTipIndex] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [trackEntries, setTrackEntries] = useState({});
   const [selectedTrackId, setSelectedTrackId] = useState(null);
@@ -93,6 +112,11 @@ export default function HabitTracker() {
   const [mobileTab, setMobileTab] = useState("habit");
   const [targetName, setTargetName] = useState("");
   const [targetDate, setTargetDate] = useState("");
+  const [targetModalOpen, setTargetModalOpen] = useState(false);
+  const [moneyTarget, setMoneyTarget] = useState(0);
+  const [moneyEarned, setMoneyEarned] = useState(0);
+  const [moneyTargetInput, setMoneyTargetInput] = useState("");
+  const [moneyEarnInput, setMoneyEarnInput] = useState("");
   const [todayInput, setTodayInput] = useState("");
   const [weekInput, setWeekInput] = useState("");
   const [monthInput, setMonthInput] = useState("");
@@ -106,6 +130,8 @@ export default function HabitTracker() {
   const [now, setNow] = useState(new Date());
   const [timerSeconds, setTimerSeconds] = useState(1500); // 25 minutes
   const [timerActive, setTimerActive] = useState(false);
+  const [timerEditMode, setTimerEditMode] = useState(false);
+  const [timerEditValue, setTimerEditValue] = useState("");
   const { logout } = useAuth();
 
   const handleLogout = async () => {
@@ -116,22 +142,102 @@ export default function HabitTracker() {
     }
   };
 
+  const toggleProTip = (tip) => {
+    setCheckedProTips((prev) => {
+      const isChecked = prev.includes(tip);
+      if (!isChecked) confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 }, colors: PALETTE });
+      const next = isChecked ? prev.filter(t => t !== tip) : [...prev, tip];
+      save({ checkedProTips: next });
+      return next;
+    });
+  };
+
+  const reorderProTips = (sourceIndex, destIndex) => {
+    setProTips((prev) => {
+      const items = Array.from(prev);
+      const [reorderedItem] = items.splice(sourceIndex, 1);
+      items.splice(destIndex, 0, reorderedItem);
+      save({ proTips: items });
+      return items;
+    });
+  };
+
+  const parseTimerInput = (raw) => {
+    const s = raw.trim().toLowerCase();
+    // "1:30" or "1:30:00" → h:m or h:m:s
+    if (/^\d+:\d+(:\d+)?$/.test(s)) {
+      const parts = s.split(":").map(Number);
+      if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+      return parts[0]*3600 + parts[1]*60;
+    }
+    // "1hr" / "1h" → hours
+    const hrMatch = s.match(/^(\d+)\s*h/);
+    if (hrMatch) return parseInt(hrMatch[1]) * 3600;
+    // "1 30" → 1 hr 30 min
+    const twoNum = s.match(/^(\d+)\s+(\d+)$/);
+    if (twoNum) return parseInt(twoNum[1])*3600 + parseInt(twoNum[2])*60;
+    // plain number → hours (e.g. "1" = 1 hour, "2" = 2 hours)
+    const hrs = parseFloat(s);
+    if (!isNaN(hrs)) return Math.round(hrs * 3600);
+    return null;
+  };
+
+  const commitTimerEdit = () => {
+    const secs = parseTimerInput(timerEditValue);
+    if (secs !== null && secs > 0) {
+      const finalSecs = Math.min(64800, secs);
+      setTimerSeconds(finalSecs);
+      save({ timerSeconds: finalSecs });
+    }
+    setTimerEditMode(false);
+    setTimerEditValue("");
+  };
+
   const startTimer = () => {
     setTimerActive(true);
+    save({ timerSeconds });
   };
 
   const stopTimer = () => {
     setTimerActive(false);
+    setTimerSeconds((prev) => {
+      save({ timerSeconds: prev });
+      return prev;
+    });
   };
 
   const resetTimer = () => {
     setTimerActive(false);
     setTimerSeconds(0);
+    save({ timerSeconds: 0 });
+  };
+
+  const updateMoneyTarget = (target) => {
+    setMoneyTarget(target);
+    save({ moneyTarget: target });
+  };
+
+  const addMoneyEarnings = (earning) => {
+    setMoneyEarned((prev) => {
+      const next = Math.min(moneyTarget, prev + earning);
+      save({ moneyEarned: next });
+      return next;
+    });
+  };
+
+  const resetMoneyTarget = () => {
+    setMoneyTarget(0);
+    setMoneyEarned(0);
+    save({ moneyTarget: 0, moneyEarned: 0 });
   };
 
   const adjustTimer = (delta) => {
     if (timerActive) return;
-    setTimerSeconds((prev) => Math.max(0, Math.min(35999, prev + delta)));
+    setTimerSeconds((prev) => {
+      const next = Math.max(0, Math.min(64800, prev + delta));
+      save({ timerSeconds: next });
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -142,6 +248,7 @@ export default function HabitTracker() {
       }, 1000);
     } else if (timerSeconds === 0) {
       setTimerActive(false);
+      save({ timerSeconds: 0 });
       // Optionally, play a sound or show a notification
     }
     return () => clearInterval(interval);
@@ -242,6 +349,14 @@ export default function HabitTracker() {
       setMonthTasks(data.monthTasks || []);
       setGoalBudgetItems(data.goalBudgetItems || []);
       setBucketListItems(data.bucketListItems || []);
+
+      setMoneyTarget(data.moneyTarget || 0);
+      setMoneyEarned(data.moneyEarned || 0);
+      setCheckedProTips(data.checkedProTips || []);
+      if (data.proTips && data.proTips.length > 0) {
+        setProTips(data.proTips);
+      }
+      setTimerSeconds(data.timerSeconds !== undefined ? data.timerSeconds : 1500);
 
       setLoaded(true);
     })();
@@ -1006,11 +1121,9 @@ export default function HabitTracker() {
         {/* LEFT: Set target panel + month countdown */}
         <div className={`ht-col ht-col-target ${mobileTab === "target" ? "ht-col-active" : ""}`} style={{ display: "grid", gap: "16px", position: "sticky", top: "1rem" }}>
         <div className="ht-card" style={{ padding: "1.1rem" }}>
-          <div style={{ fontFamily: "'Fraunces', serif", fontSize: "17px", fontWeight: 600, marginBottom: "10px" }}>Set target</div>
-          <div style={{ display: "grid", gap: "8px", marginBottom: "14px" }}>
-            <input className="ht-input" placeholder="e.g. AWS exam" value={targetName} onChange={(e) => setTargetName(e.target.value)} />
-            <input className="ht-input" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
-            <button className="ht-btn" style={{ width: "100%" }} onClick={addTarget}>+ Add target</button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: "17px", fontWeight: 600 }}>Set target</div>
+            <button className="ht-btn" style={{ padding: "6px 12px", fontSize: "12px", whiteSpace: "nowrap" }} onClick={() => setTargetModalOpen(true)}>+ Add target</button>
           </div>
           {targets.length === 0 ? (
             <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>No targets yet. Add a deadline to see a live countdown.</div>
@@ -1076,9 +1189,6 @@ export default function HabitTracker() {
             </>
           )}
 
-          <div style={{ fontFamily: "'Fraunces', serif", fontSize: "15px", fontWeight: 600, marginBottom: "12px", paddingRight: "30px" }}>
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-          </div>
 
           {countdownMode === "age" ? (
             ageInfo ? (
@@ -1140,6 +1250,42 @@ export default function HabitTracker() {
             </>
           )}
         </div>
+
+        {/* Money Target panel */}
+        <div className="ht-card" style={{ padding: "1.1rem" }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontSize: "17px", fontWeight: 600, marginBottom: "12px" }}>Yearly Target</div>
+          {moneyTarget === 0 ? (
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Set your yearly earning target</div>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>₹</span>
+                <input className="ht-input" type="number" placeholder="e.g. 550000" value={moneyTargetInput} onChange={(e) => setMoneyTargetInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && Number(moneyTargetInput) > 0) { updateMoneyTarget(Number(moneyTargetInput)); setMoneyTargetInput(""); } }} style={{ flex: 1 }} />
+                <button className="ht-btn" style={{ flexShrink: 0, padding: "8px 12px", fontSize: "12px" }} onClick={() => { if (Number(moneyTargetInput) > 0) { updateMoneyTarget(Number(moneyTargetInput)); setMoneyTargetInput(""); } }}>Set</button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Yearly Target</div>
+                <button onClick={resetMoneyTarget} style={{ border: "none", background: "none", color: "#B7563C", cursor: "pointer", fontSize: "11px" }}>Reset</button>
+              </div>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "28px", fontWeight: 700, color: (moneyTarget - moneyEarned) > 0 ? "#3F6C51" : "#10B981", marginBottom: "4px" }}>
+                ₹{((moneyTarget - moneyEarned) / 100000).toFixed(2)}L
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
+                remaining of ₹{(moneyTarget / 100000).toFixed(2)}L  ·  earned ₹{(moneyEarned / 100000).toFixed(2)}L
+              </div>
+              <div style={{ height: "6px", background: "var(--hover-bg)", borderRadius: "3px", marginBottom: "12px", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${Math.min(100, (moneyEarned / moneyTarget) * 100)}%`, background: "linear-gradient(90deg, #3F6C51, #10B981)", borderRadius: "3px", transition: "width 0.4s ease" }} />
+              </div>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>₹</span>
+                <input className="ht-input" type="number" placeholder="Enter earning..." value={moneyEarnInput} onChange={(e) => setMoneyEarnInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && Number(moneyEarnInput) > 0) { addMoneyEarnings(Number(moneyEarnInput)); setMoneyEarnInput(""); } }} style={{ flex: 1 }} />
+                <button className="ht-btn" style={{ flexShrink: 0, padding: "8px 12px", fontSize: "12px" }} onClick={() => { if (Number(moneyEarnInput) > 0) { addMoneyEarnings(Number(moneyEarnInput)); setMoneyEarnInput(""); } }}>+ Add</button>
+              </div>
+            </div>
+          )}
+        </div>
         </div>
 
         {/* CENTER: main tracker content */}
@@ -1153,11 +1299,55 @@ export default function HabitTracker() {
             </div>
           ) : (
             <div className="ht-card" style={{ padding: "1rem 1.1rem", marginBottom: "1.5rem" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px", marginBottom: "10px", flexWrap: "wrap" }}>
-                <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "13px", background: "var(--subtle-bg)", display: "inline-block", padding: "3px 8px", borderRadius: "5px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px", marginBottom: "10px" }}>
+                {/* Left: Habit List label */}
+                <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "13px", background: "var(--subtle-bg)", display: "inline-block", padding: "3px 8px", borderRadius: "5px", flexShrink: 0 }}>
                   Habit List
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+
+                {/* Center: Compact timer */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  {timerEditMode ? (
+                    <input
+                      autoFocus
+                      value={timerEditValue}
+                      onChange={(e) => setTimerEditValue(e.target.value)}
+                      onBlur={commitTimerEdit}
+                      onKeyDown={(e) => { if (e.key === "Enter") commitTimerEdit(); if (e.key === "Escape") { setTimerEditMode(false); setTimerEditValue(""); } }}
+                      placeholder="e.g. 1 30 or 90"
+                      style={{
+                        fontFamily: "'Fraunces', serif", fontSize: "14px", fontWeight: 700,
+                        width: "90px", textAlign: "center", background: "var(--subtle-bg)",
+                        border: "1px solid #3B82F6", borderRadius: "5px", color: "var(--text)",
+                        padding: "2px 6px", outline: "none"
+                      }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => { if (!timerActive) { setTimerEditMode(true); setTimerEditValue(""); } }}
+                      title={timerActive ? "Timer running" : "Click to edit time"}
+                      style={{
+                        fontFamily: "'Fraunces', serif", fontSize: "16px", fontWeight: 700,
+                        letterSpacing: "1px", color: timerActive ? "#3F6C51" : "var(--text)",
+                        minWidth: "76px", textAlign: "center", transition: "color 0.2s",
+                        cursor: timerActive ? "default" : "text",
+                        borderBottom: timerActive ? "none" : "1px dashed var(--text-muted)"
+                      }}
+                    >
+                      {formatTime(timerSeconds)}
+                    </span>
+                  )}
+                  <div style={{ width: "1px", height: "14px", background: "var(--border)" }} />
+                  {!timerActive ? (
+                    <button onClick={startTimer} style={{ border: "none", background: "#3F6C51", color: "#FFFFFC", borderRadius: "5px", fontSize: "11px", padding: "3px 9px", cursor: "pointer", fontWeight: 600 }}>Start</button>
+                  ) : (
+                    <button onClick={stopTimer} style={{ border: "none", background: "#B7563C", color: "#FFFFFC", borderRadius: "5px", fontSize: "11px", padding: "3px 9px", cursor: "pointer", fontWeight: 600 }}>Stop</button>
+                  )}
+                  <button onClick={resetTimer} style={{ border: "none", background: "var(--hover-bg)", color: "var(--text-muted)", borderRadius: "5px", fontSize: "11px", padding: "3px 9px", cursor: "pointer" }}>Reset</button>
+                </div>
+
+                {/* Right: Progress bar */}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
                   <div style={{ display: "flex", gap: "2px" }}>
                     {Array.from({ length: 6 }).map((_, i) => {
                       const filled = i < Math.round((todayProgress / 100) * 6);
@@ -1214,27 +1404,42 @@ export default function HabitTracker() {
           )}
 
           <div className="ht-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "12px", marginBottom: "1.5rem" }}>
-            <div className="ht-card" style={{ padding: "1rem", display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: "16px" }}>
-              {[
-                { name: "Google", url: "https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" },
-                { name: "Amazon", url: "https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg" },
-                { name: "Microsoft", url: "https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" },
-                { name: "Salesforce", url: "https://upload.wikimedia.org/wikipedia/commons/f/f9/Salesforce.com_logo.svg" },
-                { name: "PayPal", url: "https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" }
-              ].map((brand) => (
-                <img
-                  key={brand.name}
-                  src={brand.url}
-                  alt={brand.name}
-                  style={{ 
-                    height: brand.name === "Amazon" ? "20px" : "24px", 
-                    width: "auto",
-                    maxWidth: "60px",
-                    objectFit: "contain"
-                  }}
-                  title={brand.name}
-                />
-              ))}
+            <div className="ht-card" style={{ padding: "1.2rem", display: "flex", flexDirection: "column", justifyContent: "space-between", alignItems: "center", minHeight: "100px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "center", marginBottom: "10px" }}>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: "14px", fontWeight: 600, fontStyle: "italic", textAlign: "center", color: "var(--text-muted)", lineHeight: "1.3" }}>
+                  "Prove Who are you"
+                </div>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: "14px", fontWeight: 600, fontStyle: "italic", textAlign: "center", color: "var(--text-muted)", lineHeight: "1.3" }}>
+                  "Never give up"
+                </div>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: "14px", fontWeight: 600, fontStyle: "italic", textAlign: "center", color: "var(--text-muted)", lineHeight: "1.3" }}>
+                  "Why can't you"
+                </div>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: "14px", fontWeight: 600, fontStyle: "italic", textAlign: "center", color: "var(--text-muted)", lineHeight: "1.3" }}>
+                  "Believe your self"
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "12px", width: "100%", borderTop: "1px dashed var(--border)", paddingTop: "10px" }}>
+                {[
+                  { name: "Google", url: "https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" },
+                  { name: "Amazon", url: "https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg" },
+                  { name: "Microsoft", url: "https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" },
+                  { name: "Salesforce", url: "https://upload.wikimedia.org/wikipedia/commons/f/f9/Salesforce.com_logo.svg" }
+                ].map((brand) => (
+                  <img
+                    key={brand.name}
+                    src={brand.url}
+                    alt={brand.name}
+                    style={{ 
+                      height: brand.name === "Amazon" ? "18px" : "22px", 
+                      width: "auto",
+                      maxWidth: "50px",
+                      objectFit: "contain"
+                    }}
+                    title={brand.name}
+                  />
+                ))}
+              </div>
             </div>
             <div className="ht-card" style={{ padding: 0, overflow: "hidden", display: "flex", justifyContent: "center", alignItems: "center" }}>
               <img 
@@ -1243,84 +1448,22 @@ export default function HabitTracker() {
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             </div>
-            <div className="ht-card" style={{ padding: "1rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "2px" }}>Timer</div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <button
-                  onClick={() => adjustTimer(-3600)}
-                  disabled={timerActive}
-                  style={{
-                    background: "none", border: "none", cursor: timerActive ? "default" : "pointer",
-                    color: timerActive ? "var(--text-muted)" : "var(--text)", fontSize: "16px",
-                    opacity: timerActive ? 0.3 : 0.8
-                  }}
-                  title="Decrease 1 hour"
-                >
-                  ▼
-                </button>
-                <div
-                  title={timerActive ? "Timer running" : "Adjust time with arrows"}
-                  style={{
-                    fontFamily: "'Fraunces', serif", fontSize: "22px", fontWeight: 700,
-                    userSelect: "none",
-                    color: timerActive ? "#3F6C51" : "var(--text)",
-                    transition: "color 0.2s",
-                    minWidth: "100px",
-                    textAlign: "center"
-                  }}
-                >
-                  {formatTime(timerSeconds)}
-                </div>
-                <button
-                  onClick={() => adjustTimer(3600)}
-                  disabled={timerActive}
-                  style={{
-                    background: "none", border: "none", cursor: timerActive ? "default" : "pointer",
-                    color: timerActive ? "var(--text-muted)" : "var(--text)", fontSize: "16px",
-                    opacity: timerActive ? 0.3 : 0.8
-                  }}
-                  title="Increase 1 hour"
-                >
-                  ▲
-                </button>
+            <div className="ht-card" style={{ padding: "1.2rem", display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100px" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "14px", fontWeight: 600, fontStyle: "italic", textAlign: "center", color: "#B7563C", marginBottom: "12px", lineHeight: "1.4" }}>
+                "Fucking comfort kills your best version of you"
               </div>
-              <div style={{ display: "flex", gap: "6px" }}>
-                {!timerActive ? (
-                  <button
-                    className="ht-btn"
-                    onClick={startTimer}
-                    style={{
-                      padding: "4px 10px", fontSize: "10px", lineHeight: "1",
-                      background: "#3F6C51", color: "#F3F0E6", border: "none",
-                      borderRadius: "4px", cursor: "pointer",
-                    }}
-                  >
-                    Start
-                  </button>
-                ) : (
-                  <button
-                    className="ht-btn"
-                    onClick={stopTimer}
-                    style={{
-                      padding: "4px 10px", fontSize: "10px", lineHeight: "1",
-                      background: "#B7563C", color: "#F3F0E6", border: "none",
-                      borderRadius: "4px", cursor: "pointer",
-                    }}
-                  >
-                    Stop
-                  </button>
-                )}
-                <button
-                  className="ht-btn"
-                  onClick={resetTimer}
-                  style={{
-                    padding: "4px 10px", fontSize: "10px", lineHeight: "1",
-                    background: "var(--hover-bg)", color: "var(--text-muted)", border: "none",
-                    borderRadius: "4px", cursor: "pointer",
-                  }}
-                >
-                  Reset
-                </button>
+              <div style={{ borderTop: "1px dashed var(--border)", paddingTop: "10px" }}>
+                <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px", textAlign: "center" }}>
+                  your best version
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-start", paddingLeft: "10px" }}>
+                  {["Google Developer", "LeetCode Guardian","Himalayan 411 Bike"].map((point, index) => (
+                    <div key={index} style={{ fontSize: "12px", fontWeight: 500, color: "var(--text)", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ color: "#3B82F6", fontSize: "10px" }}>✦</span>
+                      <span>{point}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -1427,6 +1570,48 @@ export default function HabitTracker() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="ht-card" style={{ padding: "1rem", minWidth: 0, marginTop: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "17px", fontWeight: 600, color: "#3B82F6" }}>Pro Tips</div>
+            </div>
+            <div className="ht-goals-shell" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "8px" }}>
+              {proTips.map((tip, idx) => {
+                const isDone = checkedProTips.includes(tip);
+                return (
+                  <div 
+                    key={tip} 
+                    className={`ht-goal-item ${draggedProTipIndex === idx ? "dragging" : ""}`}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      setDraggedProTipIndex(idx);
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (draggedProTipIndex !== null) {
+                        reorderProTips(draggedProTipIndex, idx);
+                        setDraggedProTipIndex(null);
+                      }
+                    }}
+                    onDragEnd={() => setDraggedProTipIndex(null)}
+                    style={{ color: "#3B82F6", cursor: "grab" }}
+                  >
+                    <button
+                      className={`ht-goal-toggle ${isDone ? "done" : ""}`}
+                      onClick={() => toggleProTip(tip)}
+                      aria-label={isDone ? "Mark tip as not done" : "Mark tip as done"}
+                      style={{ color: "#3B82F6", cursor: "pointer", flexShrink: 0 }}
+                    >
+                      {isDone && <span>✓</span>}
+                    </button>
+                    <span className="ht-goal-text" style={{ color: isDone ? "var(--text-muted)" : "var(--text)", textDecoration: isDone ? "line-through" : "none" }}>{tip}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -1817,6 +2002,42 @@ export default function HabitTracker() {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
               <button className="ht-btn" onClick={() => setDobModalOpen(false)}>Cancel</button>
               <button className="ht-btn" style={{ background: "var(--text)", color: "var(--page-bg)" }} onClick={saveDob}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Target popup modal */}
+      {targetModalOpen && (
+        <div
+          onClick={() => { setTargetModalOpen(false); setTargetName(""); setTargetDate(""); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(43,42,37,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="ht-card"
+            style={{ padding: "1.5rem", width: "340px", maxWidth: "90vw" }}
+          >
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: "18px", fontWeight: 600, marginBottom: "14px" }}>Add target</div>
+            <input
+              autoFocus
+              className="ht-input"
+              placeholder="e.g. AWS exam"
+              value={targetName}
+              onChange={(e) => setTargetName(e.target.value)}
+              style={{ marginBottom: "10px" }}
+            />
+            <input
+              type="date"
+              className="ht-input"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { addTarget(); setTargetModalOpen(false); } }}
+              style={{ marginBottom: "14px" }}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <button className="ht-btn" onClick={() => { setTargetModalOpen(false); setTargetName(""); setTargetDate(""); }}>Cancel</button>
+              <button className="ht-btn" style={{ background: "var(--text)", color: "var(--page-bg)" }} onClick={() => { addTarget(); setTargetModalOpen(false); }}>Add</button>
             </div>
           </div>
         </div>
