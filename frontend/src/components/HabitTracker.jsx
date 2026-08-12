@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { storage } from "../api/storage";
 import { useAuth } from "../context/AuthContext";
+import confetti from "canvas-confetti";
 
 const PALETTE = [
   "#3B82F6", "#10B981", "#22C55E", "#FBC02D", "#FB923C", "#F0544F",
@@ -15,6 +16,12 @@ const HEATMAP_WEEKS = 53;
 const HEATMAP_BASE = "#2F9E52";
 
 const pad2 = (n) => String(n).padStart(2, "0");
+const formatTime = (totalSeconds) => {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
+};
 const isoFromDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const parseISO = (iso) => {
   const [y, m, d] = iso.split("-").map(Number);
@@ -97,6 +104,8 @@ export default function HabitTracker() {
   const [draggedTask, setDraggedTask] = useState(null);
   const [draggedGoalBudgetId, setDraggedGoalBudgetId] = useState(null);
   const [now, setNow] = useState(new Date());
+  const [timerSeconds, setTimerSeconds] = useState(1500); // 25 minutes
+  const [timerActive, setTimerActive] = useState(false);
   const { logout } = useAuth();
 
   const handleLogout = async () => {
@@ -106,6 +115,37 @@ export default function HabitTracker() {
       console.error("Logout failed", error);
     }
   };
+
+  const startTimer = () => {
+    setTimerActive(true);
+  };
+
+  const stopTimer = () => {
+    setTimerActive(false);
+  };
+
+  const resetTimer = () => {
+    setTimerActive(false);
+    setTimerSeconds(0);
+  };
+
+  const adjustTimer = (delta) => {
+    if (timerActive) return;
+    setTimerSeconds((prev) => Math.max(0, Math.min(35999, prev + delta)));
+  };
+
+  useEffect(() => {
+    let interval = null;
+    if (timerActive && timerSeconds > 0) {
+      interval = setInterval(() => {
+        setTimerSeconds((prevSeconds) => prevSeconds - 1);
+      }, 1000);
+    } else if (timerSeconds === 0) {
+      setTimerActive(false);
+      // Optionally, play a sound or show a notification
+    }
+    return () => clearInterval(interval);
+  }, [timerActive, timerSeconds]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -263,8 +303,12 @@ export default function HabitTracker() {
   };
   const toggleDay = (habitId, iso) => {
     const set = new Set(completions[habitId] || []);
-    if (set.has(iso)) set.delete(iso);
-    else set.add(iso);
+    if (set.has(iso)) {
+      set.delete(iso);
+    } else {
+      set.add(iso);
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+    }
     const next = { ...completions, [habitId]: Array.from(set) };
     setCompletions(next);
     save({ completions: next });
@@ -296,7 +340,13 @@ export default function HabitTracker() {
     save({ todayTasks: next, todayTasksDate: appDayISO() });
   };
   const toggleTodayTask = (id) => {
-    const next = todayTasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
+    const next = todayTasks.map((t) => {
+      if (t.id === id) {
+        if (!t.done) confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        return { ...t, done: !t.done };
+      }
+      return t;
+    });
     setTodayTasks(next);
     save({ todayTasks: next, todayTasksDate: appDayISO() });
   };
@@ -321,7 +371,13 @@ export default function HabitTracker() {
     save({ weekTasks: next, weekTasksWeekStart: weekStartISO(appDayISO()) });
   };
   const toggleWeekTask = (id) => {
-    const next = weekTasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
+    const next = weekTasks.map((t) => {
+      if (t.id === id) {
+        if (!t.done) confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        return { ...t, done: !t.done };
+      }
+      return t;
+    });
     setWeekTasks(next);
     save({ weekTasks: next, weekTasksWeekStart: weekStartISO(appDayISO()) });
   };
@@ -376,7 +432,13 @@ export default function HabitTracker() {
     save({ monthTasks: next, monthTasksMonthStart: `${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}-01` });
   };
   const toggleMonthTask = (id) => {
-    const next = monthTasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
+    const next = monthTasks.map((t) => {
+      if (t.id === id) {
+        if (!t.done) confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        return { ...t, done: !t.done };
+      }
+      return t;
+    });
     setMonthTasks(next);
     save({ monthTasks: next, monthTasksMonthStart: `${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}-01` });
   };
@@ -401,7 +463,13 @@ export default function HabitTracker() {
     save({ goalBudgetItems: next });
   };
   const toggleGoalBudgetDone = (id) => {
-    const next = goalBudgetItems.map((item) => (item.id === id ? { ...item, done: !item.done } : item));
+    const next = goalBudgetItems.map((item) => {
+      if (item.id === id) {
+        if (!item.done) confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        return { ...item, done: !item.done };
+      }
+      return item;
+    });
     setGoalBudgetItems(next);
     save({ goalBudgetItems: next });
   };
@@ -431,7 +499,13 @@ export default function HabitTracker() {
     save({ bucketListItems: next });
   };
   const toggleBucketListDone = (id) => {
-    const next = bucketListItems.map((item) => (item.id === id ? { ...item, done: !item.done } : item));
+    const next = bucketListItems.map((item) => {
+      if (item.id === id) {
+        if (!item.done) confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        return { ...item, done: !item.done };
+      }
+      return item;
+    });
     setBucketListItems(next);
     save({ bucketListItems: next });
   };
@@ -1140,17 +1214,114 @@ export default function HabitTracker() {
           )}
 
           <div className="ht-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "12px", marginBottom: "1.5rem" }}>
-            <div className="ht-card" style={{ padding: "1rem" }}>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Active habits</div>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "24px", fontWeight: 600 }}>{habits.length}</div>
+            <div className="ht-card" style={{ padding: "1rem", display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: "16px" }}>
+              {[
+                { name: "Google", url: "https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" },
+                { name: "Amazon", url: "https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg" },
+                { name: "Microsoft", url: "https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" },
+                { name: "Salesforce", url: "https://upload.wikimedia.org/wikipedia/commons/f/f9/Salesforce.com_logo.svg" },
+                { name: "PayPal", url: "https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" }
+              ].map((brand) => (
+                <img
+                  key={brand.name}
+                  src={brand.url}
+                  alt={brand.name}
+                  style={{ 
+                    height: brand.name === "Amazon" ? "20px" : "24px", 
+                    width: "auto",
+                    maxWidth: "60px",
+                    objectFit: "contain"
+                  }}
+                  title={brand.name}
+                />
+              ))}
             </div>
-            <div className="ht-card" style={{ padding: "1rem" }}>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>{hoveredHabit ? `Current streak — ${hoveredHabit.name}` : "Current streak"}</div>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "24px", fontWeight: 600 }}>{currentStreakDisplay}d</div>
+            <div className="ht-card" style={{ padding: 0, overflow: "hidden", display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <img 
+                src="/himalayan.png" 
+                alt="Himalayan 411 Silhouette" 
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
             </div>
-            <div className="ht-card" style={{ padding: "1rem" }}>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>{hoveredHabit ? `Longest streak — ${hoveredHabit.name}` : "Longest streak"}</div>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "24px", fontWeight: 600 }}>{longestStreakDisplay}d</div>
+            <div className="ht-card" style={{ padding: "1rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "2px" }}>Timer</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <button
+                  onClick={() => adjustTimer(-3600)}
+                  disabled={timerActive}
+                  style={{
+                    background: "none", border: "none", cursor: timerActive ? "default" : "pointer",
+                    color: timerActive ? "var(--text-muted)" : "var(--text)", fontSize: "16px",
+                    opacity: timerActive ? 0.3 : 0.8
+                  }}
+                  title="Decrease 1 hour"
+                >
+                  ▼
+                </button>
+                <div
+                  title={timerActive ? "Timer running" : "Adjust time with arrows"}
+                  style={{
+                    fontFamily: "'Fraunces', serif", fontSize: "22px", fontWeight: 700,
+                    userSelect: "none",
+                    color: timerActive ? "#3F6C51" : "var(--text)",
+                    transition: "color 0.2s",
+                    minWidth: "100px",
+                    textAlign: "center"
+                  }}
+                >
+                  {formatTime(timerSeconds)}
+                </div>
+                <button
+                  onClick={() => adjustTimer(3600)}
+                  disabled={timerActive}
+                  style={{
+                    background: "none", border: "none", cursor: timerActive ? "default" : "pointer",
+                    color: timerActive ? "var(--text-muted)" : "var(--text)", fontSize: "16px",
+                    opacity: timerActive ? 0.3 : 0.8
+                  }}
+                  title="Increase 1 hour"
+                >
+                  ▲
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                {!timerActive ? (
+                  <button
+                    className="ht-btn"
+                    onClick={startTimer}
+                    style={{
+                      padding: "4px 10px", fontSize: "10px", lineHeight: "1",
+                      background: "#3F6C51", color: "#F3F0E6", border: "none",
+                      borderRadius: "4px", cursor: "pointer",
+                    }}
+                  >
+                    Start
+                  </button>
+                ) : (
+                  <button
+                    className="ht-btn"
+                    onClick={stopTimer}
+                    style={{
+                      padding: "4px 10px", fontSize: "10px", lineHeight: "1",
+                      background: "#B7563C", color: "#F3F0E6", border: "none",
+                      borderRadius: "4px", cursor: "pointer",
+                    }}
+                  >
+                    Stop
+                  </button>
+                )}
+                <button
+                  className="ht-btn"
+                  onClick={resetTimer}
+                  style={{
+                    padding: "4px 10px", fontSize: "10px", lineHeight: "1",
+                    background: "var(--hover-bg)", color: "var(--text-muted)", border: "none",
+                    borderRadius: "4px", cursor: "pointer",
+                  }}
+                >
+                  Reset
+                </button>
+              </div>
             </div>
           </div>
 
