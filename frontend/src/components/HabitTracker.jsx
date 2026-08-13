@@ -117,6 +117,10 @@ export default function HabitTracker() {
   const [moneyEarned, setMoneyEarned] = useState(0);
   const [moneyTargetInput, setMoneyTargetInput] = useState("");
   const [moneyEarnInput, setMoneyEarnInput] = useState("");
+  const [packageTarget, setPackageTarget] = useState(0);
+  const [packageAchieved, setPackageAchieved] = useState(0);
+  const [packageTargetInput, setPackageTargetInput] = useState("");
+  const [packageAchievedInput, setPackageAchievedInput] = useState("");
   const [todayInput, setTodayInput] = useState("");
   const [weekInput, setWeekInput] = useState("");
   const [monthInput, setMonthInput] = useState("");
@@ -231,6 +235,25 @@ export default function HabitTracker() {
     save({ moneyTarget: 0, moneyEarned: 0 });
   };
 
+  const updatePackageTarget = (target) => {
+    setPackageTarget(target);
+    save({ packageTarget: target });
+  };
+
+  const addPackageAchieved = (achieved) => {
+    setPackageAchieved((prev) => {
+      const next = Math.min(packageTarget, prev + achieved);
+      save({ packageAchieved: next });
+      return next;
+    });
+  };
+
+  const resetPackageTarget = () => {
+    setPackageTarget(0);
+    setPackageAchieved(0);
+    save({ packageTarget: 0, packageAchieved: 0 });
+  };
+
   const adjustTimer = (delta) => {
     if (timerActive) return;
     setTimerSeconds((prev) => {
@@ -263,6 +286,16 @@ export default function HabitTracker() {
     const t = todayISO();
     const yearEnd = `${new Date().getFullYear()}-12-31`;
     return Math.max(0, daysBetween(t, yearEnd));
+  }, []);
+
+  const daysLeftInMonth = useMemo(() => {
+    const t = todayISO();
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const lastDayDate = new Date(year, month, 0);
+    const monthEnd = `${year}-${pad2(month)}-${pad2(lastDayDate.getDate())}`;
+    return Math.max(0, daysBetween(t, monthEnd));
   }, []);
 
   const monthRemaining = useMemo(() => {
@@ -352,6 +385,8 @@ export default function HabitTracker() {
 
       setMoneyTarget(data.moneyTarget || 0);
       setMoneyEarned(data.moneyEarned || 0);
+      setPackageTarget(data.packageTarget || 0);
+      setPackageAchieved(data.packageAchieved || 0);
       setCheckedProTips(data.checkedProTips || []);
       if (data.proTips && data.proTips.length > 0) {
         setProTips(data.proTips);
@@ -1103,6 +1138,9 @@ export default function HabitTracker() {
                 {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
               </span>
               <span style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                {daysLeftInMonth} days left in {new Date().toLocaleDateString("en-US", { month: "long" })}
+              </span>
+              <span style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
                 {daysLeftInYear} days left in {new Date().getFullYear()}
               </span>
             </div>
@@ -1147,113 +1185,8 @@ export default function HabitTracker() {
           )}
         </div>
 
-        {/* Live "left in" countdown */}
-        <div className="ht-card" style={{ padding: "1.1rem", position: "relative" }}>
-          <button
-            aria-label="More options"
-            onClick={() => setCountdownMenuOpen((v) => !v)}
-            style={{
-              position: "absolute", top: "10px", right: "10px", width: 26, height: 26, borderRadius: "50%",
-              border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text-muted)", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", letterSpacing: "1px",
-            }}
-          >
-            •••
-          </button>
-
-          {countdownMenuOpen && (
-            <>
-              <div onClick={() => setCountdownMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 900 }} />
-              <div
-                className="ht-card"
-                style={{ position: "absolute", top: "40px", right: "10px", zIndex: 901, padding: "6px", minWidth: "110px", boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}
-              >
-                {[
-                  ["month", "Month"],
-                  ["year", "Year"],
-                  ["age", "Age"],
-                ].map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    onClick={() => chooseCountdownMode(mode)}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left", border: "none",
-                      background: countdownMode === mode ? "var(--hover-bg)" : "transparent",
-                      color: "var(--text)", padding: "7px 10px", borderRadius: "6px", fontSize: "13px", cursor: "pointer",
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
-
-          {countdownMode === "age" ? (
-            ageInfo ? (
-              <div>
-                <div style={{ border: "1.5px solid var(--text)", borderRadius: "12px", background: "var(--card-bg)", padding: "18px 10px", textAlign: "center", marginBottom: "10px" }}>
-                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: "30px", fontWeight: 700, color: "var(--text)" }}>{ageInfo.weeksLeft}</div>
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>weeks left in your {ageInfo.decadeStart}s</div>
-                </div>
-                <button
-                  onClick={() => { setDobInput(dob); setDobModalOpen(true); }}
-                  style={{ border: "none", background: "none", color: "var(--text-muted)", fontSize: "11px", cursor: "pointer", textDecoration: "underline", padding: 0 }}
-                >
-                  Change date of birth
-                </button>
-              </div>
-            ) : (
-              <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                <button
-                  onClick={() => { setDobInput(""); setDobModalOpen(true); }}
-                  style={{ border: "none", background: "none", color: "#3F6C51", cursor: "pointer", textDecoration: "underline", fontSize: "13px", padding: 0 }}
-                >
-                  Set your date of birth
-                </button>{" "}
-                to see this.
-              </div>
-            )
-          ) : (
-            <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", marginBottom: "8px" }}>
-                {[
-                  ["days", (countdownMode === "year" ? yearRemaining : monthRemaining).days, true],
-                  ["hours", (countdownMode === "year" ? yearRemaining : monthRemaining).hours, false],
-                  ["mins", (countdownMode === "year" ? yearRemaining : monthRemaining).mins, false],
-                ].map(([label, value, tinted]) => (
-                  <div
-                    key={label}
-                    style={{
-                      border: "1.5px solid var(--text)",
-                      borderRadius: "12px",
-                      background: tinted && !isDark ? "#E7F3E5" : "var(--card-bg)",
-                      padding: "10px 4px",
-                      textAlign: "center",
-                    }}
-                  >
-                    <div style={{ fontFamily: "'Fraunces', serif", fontSize: "22px", fontWeight: 700, color: tinted && !isDark ? "#1F3A28" : "var(--text)" }}>{value}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{label}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{ border: "1.5px solid var(--text)", borderRadius: "12px", background: "var(--card-bg)", padding: "10px 4px", textAlign: "center", width: "72px", flexShrink: 0 }}>
-                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: "22px", fontWeight: 700 }}>{(countdownMode === "year" ? yearRemaining : monthRemaining).secs}</div>
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>secs</div>
-                </div>
-                <div style={{ fontSize: "13px", color: "var(--text)", lineHeight: 1.3 }}>
-                  Left in<br />{countdownMode === "year" ? "This Year" : "This Month"}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
         {/* Money Target panel */}
         <div className="ht-card" style={{ padding: "1.1rem" }}>
-          <div style={{ fontFamily: "'Fraunces', serif", fontSize: "17px", fontWeight: 600, marginBottom: "12px" }}>Yearly Target</div>
           {moneyTarget === 0 ? (
             <div style={{ display: "grid", gap: "8px" }}>
               <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Set your yearly earning target</div>
@@ -1266,7 +1199,7 @@ export default function HabitTracker() {
           ) : (
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Yearly Target</div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Saveing Target</div>
                 <button onClick={resetMoneyTarget} style={{ border: "none", background: "none", color: "#B7563C", cursor: "pointer", fontSize: "11px" }}>Reset</button>
               </div>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: "28px", fontWeight: 700, color: (moneyTarget - moneyEarned) > 0 ? "#3F6C51" : "#10B981", marginBottom: "4px" }}>
@@ -1282,6 +1215,54 @@ export default function HabitTracker() {
                 <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>₹</span>
                 <input className="ht-input" type="number" placeholder="Enter earning..." value={moneyEarnInput} onChange={(e) => setMoneyEarnInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && Number(moneyEarnInput) > 0) { addMoneyEarnings(Number(moneyEarnInput)); setMoneyEarnInput(""); } }} style={{ flex: 1 }} />
                 <button className="ht-btn" style={{ flexShrink: 0, padding: "8px 12px", fontSize: "12px" }} onClick={() => { if (Number(moneyEarnInput) > 0) { addMoneyEarnings(Number(moneyEarnInput)); setMoneyEarnInput(""); } }}>+ Add</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Package Target panel */}
+        <div className="ht-card" style={{ padding: "1.1rem" }}>
+          {packageTarget === 0 ? (
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Set your job package target</div>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)" }}>₹</span>
+                <input
+                  className="ht-input"
+                  type="number"
+                  placeholder="e.g. 1200000"
+                  value={packageTargetInput}
+                  onChange={(e) => setPackageTargetInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && Number(packageTargetInput) > 0) {
+                      updatePackageTarget(Number(packageTargetInput));
+                      setPackageTargetInput("");
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="ht-btn"
+                  style={{ flexShrink: 0, padding: "8px 12px", fontSize: "12px" }}
+                  onClick={() => {
+                    if (Number(packageTargetInput) > 0) {
+                      updatePackageTarget(Number(packageTargetInput));
+                      setPackageTargetInput("");
+                    }
+                  }}
+                >
+                  Set
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Package Target</div>
+                <button onClick={resetPackageTarget} style={{ border: "none", background: "none", color: "#B7563C", cursor: "pointer", fontSize: "11px" }}>Reset</button>
+              </div>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "28px", fontWeight: 700, color: "#3F6C51", marginBottom: "4px" }}>
+                ₹{(packageTarget / 100000).toFixed(2)}L
               </div>
             </div>
           )}
