@@ -129,6 +129,7 @@ export default function HabitTracker() {
   const [packageAchieved, setPackageAchieved] = useState(0);
   const [packageTargetInput, setPackageTargetInput] = useState("");
   const [packageAchievedInput, setPackageAchievedInput] = useState("");
+  const [selectedSavingYear, setSelectedSavingYear] = useState(new Date().getFullYear());
   const [todayInput, setTodayInput] = useState("");
   const [weekInput, setWeekInput] = useState("");
   const [monthInput, setMonthInput] = useState("");
@@ -773,6 +774,12 @@ export default function HabitTracker() {
     save({ notes: next });
   };
 
+  const togglePinNote = (id) => {
+    const next = notes.map((n) => n.id === id ? { ...n, pinned: !n.pinned } : n);
+    setNotes(next);
+    save({ notes: next });
+  };
+
   const startEditNote = (note) => {
     setEditNoteId(note.id);
     setEditNoteTitleInput(note.title);
@@ -1342,9 +1349,80 @@ export default function HabitTracker() {
           ) : (
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Saveing Target</div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Saving Target</div>
                 <button onClick={resetMoneyTarget} style={{ border: "none", background: "none", color: "#B7563C", cursor: "pointer", fontSize: "11px" }}>Reset</button>
               </div>
+              {/* Year Roadmap */}
+              {(() => {
+                const yearData = {
+                  2026: { label: "₹5L", detail: "Target: ₹5 Lakh", color: "#3F6C51", age: 21 },
+                  2027: { label: "₹30L", detail: "₹25L + ₹5L = ₹30 Lakh", color: "#2E7D6B", age: 22 },
+                  2028: { label: "₹1Cr", detail: "₹70L + ₹30L = ₹1 Crore", color: "#1A6B78", age: 23 },
+                  2029: { label: "₹2Cr", detail: "₹1Cr + ₹1Cr = ₹2 Crore", color: "#155E75", age: 24 },
+                  2030: { label: "₹5Cr", detail: "₹3Cr + ₹2Cr = ₹5 Crore", color: "#0F4C81", age: 25 },
+                };
+                const years = [2026, 2027, 2028, 2029, 2030];
+                const selected = yearData[selectedSavingYear];
+                return (
+                  <div style={{ marginBottom: "14px" }}>
+                    {/* Divider */}
+                    <div style={{ height: "1px", background: "var(--hover-bg)", marginBottom: "10px", marginTop: "2px" }} />
+                    {/* Year pills row */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "0", marginBottom: "10px", position: "relative" }}>
+                      {/* Connecting line */}
+                      <div style={{ position: "absolute", top: "50%", left: "14px", right: "14px", height: "2px", background: "var(--hover-bg)", transform: "translateY(-50%)", zIndex: 0 }} />
+                      {years.map((yr, idx) => {
+                        const isSelected = selectedSavingYear === yr;
+                        const isPast = yr < selectedSavingYear;
+                        return (
+                          <div key={yr} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", zIndex: 1 }}>
+                            <button
+                              onClick={() => setSelectedSavingYear(yr)}
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "50%",
+                                border: isSelected ? `2px solid ${yearData[yr].color}` : "2px solid var(--hover-bg)",
+                                background: isSelected ? yearData[yr].color : isPast ? "var(--hover-bg)" : "var(--card-bg, #fff)",
+                                color: isSelected ? "#fff" : isPast ? "var(--text-muted)" : "var(--text-muted)",
+                                cursor: "pointer",
+                                fontSize: "10px",
+                                fontWeight: 700,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                transition: "all 0.2s ease",
+                                boxShadow: isSelected ? `0 2px 8px ${yearData[yr].color}55` : "none",
+                                padding: 0,
+                              }}
+                            >
+                              {yearData[yr].age}
+                            </button>
+                            <span style={{ fontSize: "9px", color: isSelected ? yearData[yr].color : "var(--text-muted)", fontWeight: isSelected ? 700 : 400, marginTop: "3px", letterSpacing: "0.02em" }}>{yr}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Selected year info */}
+                    {selected && (
+                      <div style={{
+                        background: `${selected.color}12`,
+                        border: `1px solid ${selected.color}30`,
+                        borderRadius: "8px",
+                        padding: "8px 12px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "8px",
+                      }}>
+                        <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{selectedSavingYear} Goal</div>
+                        <div style={{ fontFamily: "'Fraunces', serif", fontSize: "22px", fontWeight: 700, color: selected.color }}>{selected.label}</div>
+                      </div>
+                    )}
+                    <div style={{ height: "1px", background: "var(--hover-bg)", marginTop: "10px" }} />
+                  </div>
+                );
+              })()}
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: "28px", fontWeight: 700, color: (moneyTarget - moneyEarned) > 0 ? "#3F6C51" : "#10B981", marginBottom: "4px" }}>
                 ₹{((moneyTarget - moneyEarned) / 100000).toFixed(2)}L
               </div>
@@ -2195,16 +2273,34 @@ export default function HabitTracker() {
             </div>
           ) : (
             <div className="ht-notes-list">
-              {notes.map((note, idx) => {
+              {[...notes].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)).map((note, idx) => {
                 const accentColors = ["#6366F1","#F59E0B","#10B981","#F43F5E","#8B5CF6","#3B82F6","#EC4899","#14B8A6"];
                 const accent = accentColors[idx % accentColors.length];
                 return (
-                  <div key={note.id} className="ht-note-card" style={{ "--note-accent": accent }}>
+                  <div key={note.id} className="ht-note-card" style={{ "--note-accent": accent, outline: note.pinned ? `1.5px solid ${accent}` : "none", outlineOffset: "0px" }}>
                     <div className="ht-note-accent-bar" />
                     <div className="ht-note-content">
                       <div className="ht-note-top-row">
-                        {note.title && <div className="ht-note-title">{note.title}</div>}
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                          {note.pinned && (
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill={accent} stroke={accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+                            </svg>
+                          )}
+                          {note.title && <div className="ht-note-title">{note.title}</div>}
+                        </div>
                         <div className="ht-note-actions">
+                          <button
+                            className="ht-note-icon-btn"
+                            onClick={() => togglePinNote(note.id)}
+                            title={note.pinned ? "Unpin note" : "Pin note"}
+                            style={{ color: note.pinned ? accent : undefined, opacity: note.pinned ? 1 : undefined }}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill={note.pinned ? accent : "none"} stroke={note.pinned ? accent : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="12" y1="17" x2="12" y2="22"/>
+                              <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/>
+                            </svg>
+                          </button>
                           <button
                             className="ht-note-icon-btn ht-note-edit-icon"
                             onClick={() => startEditNote(note)}
