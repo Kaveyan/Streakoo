@@ -37,6 +37,7 @@ const HabitDataSchema = new mongoose.Schema(
     checkedProTips: { type: Array, default: [] },
     proTips: { type: Array, default: [] },
     timerSeconds: { type: Number, default: 1500 },
+    notes: { type: Array, default: [] },
   },
   { timestamps: true, minimize: false }
 );

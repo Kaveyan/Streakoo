@@ -96,6 +96,14 @@ export default function HabitTracker() {
   const [tracks, setTracks] = useState([]);
   const [trackEntries, setTrackEntries] = useState({});
   const [selectedTrackId, setSelectedTrackId] = useState(null);
+  const [notes, setNotes] = useState([]);
+  const [noteTitleInput, setNoteTitleInput] = useState("");
+  const [noteParagraphInput, setNoteParagraphInput] = useState("");
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [editNoteId, setEditNoteId] = useState(null);
+  const [editNoteTitleInput, setEditNoteTitleInput] = useState("");
+  const [editNoteParagraphInput, setEditNoteParagraphInput] = useState("");
+  const [editNoteModalOpen, setEditNoteModalOpen] = useState(false);
   const [hoveredHabitId, setHoveredHabitId] = useState(null);
 
   const [loaded, setLoaded] = useState(false);
@@ -136,6 +144,10 @@ export default function HabitTracker() {
   const [timerActive, setTimerActive] = useState(false);
   const [timerEditMode, setTimerEditMode] = useState(false);
   const [timerEditValue, setTimerEditValue] = useState("");
+  // Inline edit state for tasks and habits
+  const [editingTask, setEditingTask] = useState(null); // { list: 'today'|'week'|'month', id, value }
+  const [editingHabitId, setEditingHabitId] = useState(null);
+  const [editingHabitValue, setEditingHabitValue] = useState("");
   const { logout } = useAuth();
 
   const handleLogout = async () => {
@@ -144,6 +156,33 @@ export default function HabitTracker() {
     } catch (error) {
       console.error("Logout failed", error);
     }
+  };
+
+  // ---------- Inline task rename ----------
+  const commitTaskRename = () => {
+    if (!editingTask) return;
+    const { list, id, value } = editingTask;
+    const trimmed = value.trim();
+    if (!trimmed) { setEditingTask(null); return; }
+    const setters = { today: setTodayTasks, week: setWeekTasks, month: setMonthTasks };
+    const getters = { today: todayTasks, week: weekTasks, month: monthTasks };
+    const saveKeys = { today: "todayTasks", week: "weekTasks", month: "monthTasks" };
+    // eslint-disable-next-line no-unused-vars
+    const next = getters[list].map((t) => t.id === id ? { ...t, text: trimmed } : t);
+    setters[list](next);
+    save({ [saveKeys[list]]: next });
+    setEditingTask(null);
+  };
+
+  // ---------- Inline habit rename ----------
+  const commitHabitRename = () => {
+    if (!editingHabitId) return;
+    const trimmed = editingHabitValue.trim();
+    if (!trimmed) { setEditingHabitId(null); return; }
+    const next = habits.map((h) => h.id === editingHabitId ? { ...h, name: trimmed } : h);
+    setHabits(next);
+    save({ habits: next });
+    setEditingHabitId(null);
   };
 
   const toggleProTip = (tip) => {
@@ -372,6 +411,7 @@ export default function HabitTracker() {
       setTargets(data.targets || []);
       setTracks(data.tracks || []);
       setTrackEntries(data.trackEntries || {});
+      setNotes(data.notes || []);
       if ((data.tracks || []).length > 0) setSelectedTrackId(data.tracks[0].id);
       setTheme(data.theme === "light" ? "light" : "dark");
       setCountdownMode(data.countdownMode || "month");
@@ -708,6 +748,61 @@ export default function HabitTracker() {
     save({ trackEntries: next });
   };
 
+  // ---------- Notes ----------
+  const addNote = () => {
+    const title = noteTitleInput.trim();
+    const text = noteParagraphInput.trim();
+    if (!title && !text) return;
+    const newNote = {
+      id: "n_" + Date.now(),
+      title,
+      text,
+      createdAt: new Date().toISOString()
+    };
+    const next = [newNote, ...notes];
+    setNotes(next);
+    setNoteTitleInput("");
+    setNoteParagraphInput("");
+    setNoteModalOpen(false);
+    save({ notes: next });
+  };
+
+  const removeNote = (id) => {
+    const next = notes.filter((n) => n.id !== id);
+    setNotes(next);
+    save({ notes: next });
+  };
+
+  const startEditNote = (note) => {
+    setEditNoteId(note.id);
+    setEditNoteTitleInput(note.title);
+    setEditNoteParagraphInput(note.text);
+    setEditNoteModalOpen(true);
+  };
+
+  const saveEditNote = () => {
+    if (!editNoteId) return;
+    const title = editNoteTitleInput.trim();
+    const text = editNoteParagraphInput.trim();
+    if (!title && !text) return;
+    const next = notes.map((n) =>
+      n.id === editNoteId ? { ...n, title, text, updatedAt: new Date().toISOString() } : n
+    );
+    setNotes(next);
+    setEditNoteId(null);
+    setEditNoteModalOpen(false);
+    setEditNoteTitleInput("");
+    setEditNoteParagraphInput("");
+    save({ notes: next });
+  };
+
+  const cancelEditNote = () => {
+    setEditNoteId(null);
+    setEditNoteModalOpen(false);
+    setEditNoteTitleInput("");
+    setEditNoteParagraphInput("");
+  };
+
   // ---------- Derived: habits ----------
   const completionSets = useMemo(() => {
     const map = {};
@@ -1031,6 +1126,9 @@ export default function HabitTracker() {
         .ht-goal-item:hover .ht-goal-delete,
         .ht-goal-item:focus-within .ht-goal-delete { opacity: 1; color: #D92D20; }
         .ht-goal-delete:hover { color: #B42318; }
+        .ht-inline-edit-input { flex: 1; border: none; background: transparent; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; padding: 0 2px; outline: none; min-width: 0; line-height: 1.4; }
+        .ht-editable-text { cursor: text; border-radius: 4px; transition: background 0.12s; }
+        .ht-editable-text:hover { background: rgba(99,102,241,0.08); }
         @media (max-width: 768px) {
           .ht-root-padding { padding: 1rem 1rem 1.5rem !important; border-radius: 0 !important; }
           .ht-header-row { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; margin-bottom: 1rem !important; }
@@ -1061,6 +1159,51 @@ export default function HabitTracker() {
         @media (min-width: 769px) and (max-width: 1024px) {
           .ht-main-grid { grid-template-columns: 220px minmax(0, 1fr) 240px !important; gap: 16px !important; }
           .ht-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+        }
+        /* ---- Notes Panel ---- */
+        .ht-notes-panel { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+        .ht-notes-header { padding: 18px 20px 16px; background: linear-gradient(135deg, var(--subtle-bg) 0%, var(--card-bg) 100%); border-bottom: 1px solid var(--border); color: var(--text); }
+        .ht-notes-icon-wrap { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #6366F1, #8B5CF6); display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
+        .ht-notes-form-wrap { padding: 16px 20px 0; display: flex; flex-direction: column; gap: 10px; }
+        .ht-notes-title-input { font-weight: 600; font-size: 14px !important; }
+        .ht-notes-textarea { resize: vertical; min-height: 72px; font-family: 'Inter', sans-serif; font-size: 13px !important; line-height: 1.5; }
+        .ht-notes-add-btn { align-self: flex-end; display: inline-flex; align-items: center; gap: 6px; border: none; background: linear-gradient(135deg, #6366F1, #8B5CF6); color: #fff; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: opacity 0.15s, transform 0.1s; margin-bottom: 16px; }
+        .ht-notes-add-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+        .ht-notes-add-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+        .ht-notes-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
+        .ht-notes-list { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 12px; }
+        .ht-note-card { display: flex; border-radius: 10px; border: 1px solid var(--border); background: var(--card-bg); overflow: hidden; transition: box-shadow 0.15s, transform 0.15s; }
+        .ht-note-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-1px); }
+        .ht-note-accent-bar { width: 4px; flex-shrink: 0; background: var(--note-accent, #6366F1); border-radius: 0; }
+        .ht-note-content { flex: 1; min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+        .ht-note-edit-form { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+        .ht-note-top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+        .ht-note-title { font-size: 14px; font-weight: 700; color: var(--note-accent, #6366F1); flex: 1; min-width: 0; line-height: 1.3; text-transform: uppercase; letter-spacing: 0.04em; }
+        .ht-note-text { font-size: 13px; color: var(--text); white-space: pre-wrap; line-height: 1.55; opacity: 0.88; }
+        .ht-note-footer { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+        .ht-note-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        .ht-note-icon-btn { border: none; background: transparent; cursor: pointer; border-radius: 6px; padding: 5px; display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s; color: var(--text-muted); }
+        .ht-note-edit-icon:hover { background: rgba(99,102,241,0.12); color: #6366F1; }
+        .ht-note-delete-icon:hover { background: rgba(183,86,60,0.12); color: #B7563C; }
+        .ht-note-action-btn { border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; border: 1px solid var(--border-strong); transition: background 0.12s; }
+        .ht-note-cancel-btn { background: var(--subtle-bg); color: var(--text-muted); }
+        .ht-note-cancel-btn:hover { background: var(--hover-bg); }
+        .ht-note-save-btn { background: linear-gradient(135deg, #6366F1, #8B5CF6); color: #fff; border-color: transparent; }
+        .ht-note-save-btn:hover { opacity: 0.9; }
+        .ht-note-save-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+        .ht-note-modal { padding: 0 !important; width: 420px; max-width: 94vw; border-radius: 16px !important; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.35) !important; }
+        .ht-note-modal-header { display: flex; align-items: center; gap: 12px; padding: 18px 20px; background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%); color: #fff; }
+        .ht-note-modal-header .ht-notes-icon-wrap { background: rgba(255,255,255,0.2); flex-shrink: 0; }
+        .ht-note-modal-close { margin-left: auto; border: none; background: rgba(255,255,255,0.15); color: #fff; border-radius: 8px; width: 30px; height: 30px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.12s; flex-shrink: 0; }
+        .ht-note-modal-close:hover { background: rgba(255,255,255,0.3); }
+        .ht-note-modal-body { padding: 20px 20px 4px; display: flex; flex-direction: column; }
+        .ht-note-modal-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; display: block; }
+        .ht-note-modal-footer { padding: 16px 20px 20px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border); margin-top: 16px; }
+        .ht-note-modal-footer .ht-note-action-btn { padding: 9px 18px; font-size: 13px; }
+        @media (max-width: 768px) {
+          .ht-notes-form-wrap { padding: 14px 14px 0; }
+          .ht-notes-list { padding: 0 14px 14px; }
+          .ht-notes-header { padding: 14px; }
         }
       `}</style>
 
@@ -1375,7 +1518,23 @@ export default function HabitTracker() {
                       >
                         {doneToday && <span style={{ color: "#FFFFFC", fontSize: "11px" }}>✓</span>}
                       </button>
-                      <span style={{ flex: 1, fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.name}</span>
+                      {editingHabitId === h.id ? (
+                        <input
+                          autoFocus
+                          className="ht-inline-edit-input"
+                          value={editingHabitValue}
+                          onChange={(e) => setEditingHabitValue(e.target.value)}
+                          onBlur={commitHabitRename}
+                          onKeyDown={(e) => { if (e.key === "Enter") commitHabitRename(); if (e.key === "Escape") setEditingHabitId(null); }}
+                        />
+                      ) : (
+                        <span
+                          className="ht-editable-text"
+                          style={{ flex: 1, fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                          onDoubleClick={() => { setEditingHabitId(h.id); setEditingHabitValue(h.name); }}
+                          title="Double-click to edit"
+                        >{h.name}</span>
+                      )}
                       <button onClick={() => setDeleteHabitId(h.id)} aria-label={`Delete ${h.name}`} style={{ border: "none", background: "none", color: "#B7563C", cursor: "pointer", fontSize: "13px", flexShrink: 0 }}>×</button>
                     </div>
                   );
@@ -1715,7 +1874,23 @@ export default function HabitTracker() {
                     <div className={`ht-check ${t.done ? "done" : ""}`} onClick={() => toggleTodayTask(t.id)}>
                       {t.done && <span style={{ color: "#FFFFFC", fontSize: "12px" }}>✓</span>}
                     </div>
-                    <span className="ht-task-text" style={{ textDecoration: t.done ? "line-through" : "none", color: t.done ? "var(--text-muted)" : "var(--text)" }}>{t.text}</span>
+                    {editingTask?.list === "today" && editingTask.id === t.id ? (
+                      <input
+                        autoFocus
+                        className="ht-inline-edit-input"
+                        value={editingTask.value}
+                        onChange={(e) => setEditingTask({ ...editingTask, value: e.target.value })}
+                        onBlur={commitTaskRename}
+                        onKeyDown={(e) => { if (e.key === "Enter") commitTaskRename(); if (e.key === "Escape") setEditingTask(null); }}
+                      />
+                    ) : (
+                      <span
+                        className="ht-task-text ht-editable-text"
+                        style={{ textDecoration: t.done ? "line-through" : "none", color: t.done ? "var(--text-muted)" : "var(--text)" }}
+                        onDoubleClick={() => setEditingTask({ list: "today", id: t.id, value: t.text })}
+                        title="Double-click to edit"
+                      >{t.text}</span>
+                    )}
                     <button
                       className={`ht-pin ${t.pinned ? "active" : ""}`}
                       onClick={() => toggleTodayPin(t.id)}
@@ -1785,7 +1960,23 @@ export default function HabitTracker() {
                     <div className={`ht-check ${t.done ? "done" : ""}`} onClick={() => toggleWeekTask(t.id)}>
                       {t.done && <span style={{ color: "#FFFFFC", fontSize: "12px" }}>✓</span>}
                     </div>
-                    <span className="ht-task-text" style={{ textDecoration: t.done ? "line-through" : "none", color: t.done ? "var(--text-muted)" : "var(--text)" }}>{t.text}</span>
+                    {editingTask?.list === "week" && editingTask.id === t.id ? (
+                      <input
+                        autoFocus
+                        className="ht-inline-edit-input"
+                        value={editingTask.value}
+                        onChange={(e) => setEditingTask({ ...editingTask, value: e.target.value })}
+                        onBlur={commitTaskRename}
+                        onKeyDown={(e) => { if (e.key === "Enter") commitTaskRename(); if (e.key === "Escape") setEditingTask(null); }}
+                      />
+                    ) : (
+                      <span
+                        className="ht-task-text ht-editable-text"
+                        style={{ textDecoration: t.done ? "line-through" : "none", color: t.done ? "var(--text-muted)" : "var(--text)" }}
+                        onDoubleClick={() => setEditingTask({ list: "week", id: t.id, value: t.text })}
+                        title="Double-click to edit"
+                      >{t.text}</span>
+                    )}
                     <button
                       className={`ht-pin ${t.pinned ? "active" : ""}`}
                       onClick={() => toggleWeekPin(t.id)}
@@ -1855,7 +2046,23 @@ export default function HabitTracker() {
                     <div className={`ht-check ${t.done ? "done" : ""}`} onClick={() => toggleMonthTask(t.id)} style={{ borderColor: "#8B5CF6" }}>
                       {t.done && <span style={{ color: "#FFFFFC", fontSize: "12px" }}>✓</span>}
                     </div>
-                    <span className="ht-task-text" style={{ textDecoration: t.done ? "line-through" : "none", color: t.done ? "var(--text-muted)" : "var(--text)" }}>{t.text}</span>
+                    {editingTask?.list === "month" && editingTask.id === t.id ? (
+                      <input
+                        autoFocus
+                        className="ht-inline-edit-input"
+                        value={editingTask.value}
+                        onChange={(e) => setEditingTask({ ...editingTask, value: e.target.value })}
+                        onBlur={commitTaskRename}
+                        onKeyDown={(e) => { if (e.key === "Enter") commitTaskRename(); if (e.key === "Escape") setEditingTask(null); }}
+                      />
+                    ) : (
+                      <span
+                        className="ht-task-text ht-editable-text"
+                        style={{ textDecoration: t.done ? "line-through" : "none", color: t.done ? "var(--text-muted)" : "var(--text)" }}
+                        onDoubleClick={() => setEditingTask({ list: "month", id: t.id, value: t.text })}
+                        title="Double-click to edit"
+                      >{t.text}</span>
+                    )}
                     <button
                       className={`ht-pin ${t.pinned ? "active" : ""}`}
                       onClick={() => toggleMonthPin(t.id)}
@@ -1878,84 +2085,268 @@ export default function HabitTracker() {
 
       {/* Track page */}
       {activePage === "track" && (
-      <div className="ht-card" style={{ padding: "1.25rem" }}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: "19px", fontWeight: 600, marginBottom: "12px" }}>Track</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        <div className="ht-card" style={{ padding: "1.25rem" }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontSize: "19px", fontWeight: 600, marginBottom: "12px" }}>Track</div>
 
-        <div className="ht-track-form">
-          <input className="ht-input" placeholder="e.g. Learn" value={trackNameInput} onChange={(e) => setTrackNameInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTrack()} />
-          <button className="ht-btn" style={{ flexShrink: 0 }} onClick={addTrack}>+ Add track</button>
+          <div className="ht-track-form">
+            <input className="ht-input" placeholder="e.g. Learn" value={trackNameInput} onChange={(e) => setTrackNameInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTrack()} />
+            <button className="ht-btn" style={{ flexShrink: 0 }} onClick={addTrack}>+ Add track</button>
+          </div>
+
+          {tracks.length === 0 ? (
+            <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Add a track (like "Learn" or "Run") to log daily numbers and see them charted.</div>
+          ) : (
+            <>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
+                {tracks.map((t) => (
+                  <button
+                    key={t.id}
+                    className={`ht-track-btn ${selectedTrackId === t.id ? "active" : ""}`}
+                    style={selectedTrackId === t.id ? { background: t.color, borderColor: t.color } : {}}
+                    onClick={() => setSelectedTrackId(t.id)}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+
+              {selectedTrack && (
+                <div>
+                  <div className="ht-track-entry-row">
+                    <input className="ht-input ht-input-date" type="date" max={todayISO()} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+                    <input className="ht-input ht-input-value" type="number" step="0.1" placeholder="Hours" value={entryValue} onChange={(e) => setEntryValue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTrackEntry()} />
+                    <button className="ht-btn" onClick={addTrackEntry}>Save entry</button>
+                    <button onClick={() => removeTrack(selectedTrack.id)} style={{ border: "none", background: "none", color: "#B7563C", cursor: "pointer", fontSize: "12px", marginLeft: "auto" }}>Remove track</button>
+                  </div>
+
+                  {selectedTrackData.length === 0 ? (
+                    <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>No entries yet for {selectedTrack.name}. Log today's number, or pick an earlier date if you missed a day.</div>
+                  ) : (
+                    <div style={{ height: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={selectedTrackData} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id={`grad-${selectedTrack.id}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={selectedTrack.color} stopOpacity={0.55} />
+                              <stop offset="100%" stopColor={selectedTrack.color} stopOpacity={0.03} />
+                            </linearGradient>
+                            <linearGradient id={`stroke-${selectedTrack.id}`} x1="0" y1="0" x2="1" y2="0">
+                              <stop offset="0%" stopColor="#F0544F" />
+                              <stop offset="35%" stopColor="#FB923C" />
+                              <stop offset="65%" stopColor={selectedTrack.color} />
+                              <stop offset="100%" stopColor="#6366F1" />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid stroke="var(--subtle-bg)" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
+                          <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+                          <Tooltip
+                            formatter={(v) => [v, selectedTrack.name]}
+                            labelFormatter={(l) => l}
+                            contentStyle={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="value"
+                            stroke={`url(#stroke-${selectedTrack.id})`}
+                            strokeWidth={3}
+                            fill={`url(#grad-${selectedTrack.id})`}
+                            dot={{ r: 4, stroke: "#FFFFFC", strokeWidth: 2, fill: selectedTrack.color }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
-        {tracks.length === 0 ? (
-          <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Add a track (like "Learn" or "Run") to log daily numbers and see them charted.</div>
-        ) : (
-          <>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
-              {tracks.map((t) => (
-                <button
-                  key={t.id}
-                  className={`ht-track-btn ${selectedTrackId === t.id ? "active" : ""}`}
-                  style={selectedTrackId === t.id ? { background: t.color, borderColor: t.color } : {}}
-                  onClick={() => setSelectedTrackId(t.id)}
-                >
-                  {t.name}
-                </button>
-              ))}
-            </div>
-
-            {selectedTrack && (
-              <div>
-                <div className="ht-track-entry-row">
-                  <input className="ht-input ht-input-date" type="date" max={todayISO()} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
-                  <input className="ht-input ht-input-value" type="number" step="0.1" placeholder="Hours" value={entryValue} onChange={(e) => setEntryValue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTrackEntry()} />
-                  <button className="ht-btn" onClick={addTrackEntry}>Save entry</button>
-                  <button onClick={() => removeTrack(selectedTrack.id)} style={{ border: "none", background: "none", color: "#B7563C", cursor: "pointer", fontSize: "12px", marginLeft: "auto" }}>Remove track</button>
+        {/* Notes Panel - Redesigned */}
+        <div className="ht-notes-panel">
+          {/* Panel Header */}
+          <div className="ht-notes-header">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div className="ht-notes-icon-wrap">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                 </div>
-
-                {selectedTrackData.length === 0 ? (
-                  <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>No entries yet for {selectedTrack.name}. Log today's number, or pick an earlier date if you missed a day.</div>
-                ) : (
-                  <div style={{ height: 240 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={selectedTrackData} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id={`grad-${selectedTrack.id}`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={selectedTrack.color} stopOpacity={0.55} />
-                            <stop offset="100%" stopColor={selectedTrack.color} stopOpacity={0.03} />
-                          </linearGradient>
-                          <linearGradient id={`stroke-${selectedTrack.id}`} x1="0" y1="0" x2="1" y2="0">
-                            <stop offset="0%" stopColor="#F0544F" />
-                            <stop offset="35%" stopColor="#FB923C" />
-                            <stop offset="65%" stopColor={selectedTrack.color} />
-                            <stop offset="100%" stopColor="#6366F1" />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid stroke="var(--subtle-bg)" vertical={false} />
-                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
-                        <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-                        <Tooltip
-                          formatter={(v) => [v, selectedTrack.name]}
-                          labelFormatter={(l) => l}
-                          contentStyle={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="value"
-                          stroke={`url(#stroke-${selectedTrack.id})`}
-                          strokeWidth={3}
-                          fill={`url(#grad-${selectedTrack.id})`}
-                          dot={{ r: 4, stroke: "#FFFFFC", strokeWidth: 2, fill: selectedTrack.color }}
-                          activeDot={{ r: 6 }}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
+                <div>
+                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: "20px", fontWeight: 700, lineHeight: 1 }}>Notes</div>
+                  <div style={{ fontSize: "11px", opacity: 0.7, marginTop: "2px" }}>{notes.length} note{notes.length !== 1 ? "s" : ""}</div>
+                </div>
               </div>
-            )}
-          </>
-        )}
+              <button className="ht-notes-add-btn" onClick={() => setNoteModalOpen(true)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New Note
+              </button>
+            </div>
+          </div>
+
+          {/* Notes List */}
+          {notes.length === 0 ? (
+            <div className="ht-notes-empty">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3, marginBottom: "10px" }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <div style={{ fontWeight: 600, marginBottom: "4px" }}>No notes yet</div>
+              <div style={{ fontSize: "12px", opacity: 0.65 }}>Click "New Note" to get started</div>
+            </div>
+          ) : (
+            <div className="ht-notes-list">
+              {notes.map((note, idx) => {
+                const accentColors = ["#6366F1","#F59E0B","#10B981","#F43F5E","#8B5CF6","#3B82F6","#EC4899","#14B8A6"];
+                const accent = accentColors[idx % accentColors.length];
+                return (
+                  <div key={note.id} className="ht-note-card" style={{ "--note-accent": accent }}>
+                    <div className="ht-note-accent-bar" />
+                    <div className="ht-note-content">
+                      <div className="ht-note-top-row">
+                        {note.title && <div className="ht-note-title">{note.title}</div>}
+                        <div className="ht-note-actions">
+                          <button
+                            className="ht-note-icon-btn ht-note-edit-icon"
+                            onClick={() => startEditNote(note)}
+                            title="Edit note"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          </button>
+                          <button
+                            className="ht-note-icon-btn ht-note-delete-icon"
+                            onClick={() => removeNote(note.id)}
+                            title="Delete note"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                          </button>
+                        </div>
+                      </div>
+                      {note.text && (
+                        <div className="ht-note-text">{note.text}</div>
+                      )}
+                      <div className="ht-note-footer">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span>
+                          {new Date(note.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                          {note.updatedAt && " · edited"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
+      )}
+
+      {/* Add Note Modal */}
+      {noteModalOpen && (
+        <div
+          onClick={() => { setNoteModalOpen(false); setNoteTitleInput(""); setNoteParagraphInput(""); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)" }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="ht-card ht-note-modal"
+          >
+            {/* Modal Header */}
+            <div className="ht-note-modal-header">
+              <div className="ht-notes-icon-wrap">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </div>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "18px", fontWeight: 700 }}>New Note</div>
+              <button className="ht-note-modal-close" onClick={() => { setNoteModalOpen(false); setNoteTitleInput(""); setNoteParagraphInput(""); }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            {/* Modal Body */}
+            <div className="ht-note-modal-body">
+              <label className="ht-note-modal-label">Title</label>
+              <input
+                autoFocus
+                className="ht-input ht-notes-title-input"
+                placeholder="Enter note title..."
+                value={noteTitleInput}
+                onChange={(e) => setNoteTitleInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && document.getElementById("ht-note-textarea")?.focus()}
+              />
+              <label className="ht-note-modal-label" style={{ marginTop: "12px" }}>Note</label>
+              <textarea
+                id="ht-note-textarea"
+                className="ht-input ht-notes-textarea"
+                placeholder="Write your thoughts here..."
+                value={noteParagraphInput}
+                onChange={(e) => setNoteParagraphInput(e.target.value)}
+                rows={5}
+              />
+            </div>
+            <div className="ht-note-modal-footer">
+              <button className="ht-note-action-btn ht-note-cancel-btn" onClick={() => { setNoteModalOpen(false); setNoteTitleInput(""); setNoteParagraphInput(""); }}>Cancel</button>
+              <button
+                className="ht-note-action-btn ht-note-save-btn"
+                onClick={addNote}
+                disabled={!noteTitleInput.trim() && !noteParagraphInput.trim()}
+              >
+                Add Note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Note Modal */}
+      {editNoteModalOpen && (
+        <div
+          onClick={cancelEditNote}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)" }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="ht-card ht-note-modal"
+          >
+            {/* Modal Header */}
+            <div className="ht-note-modal-header">
+              <div className="ht-notes-icon-wrap">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </div>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: "18px", fontWeight: 700 }}>Edit Note</div>
+              <button className="ht-note-modal-close" onClick={cancelEditNote}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            {/* Modal Body */}
+            <div className="ht-note-modal-body">
+              <label className="ht-note-modal-label">Title</label>
+              <input
+                autoFocus
+                className="ht-input ht-notes-title-input"
+                placeholder="Enter note title..."
+                value={editNoteTitleInput}
+                onChange={(e) => setEditNoteTitleInput(e.target.value)}
+              />
+              <label className="ht-note-modal-label" style={{ marginTop: "12px" }}>Note</label>
+              <textarea
+                className="ht-input ht-notes-textarea"
+                placeholder="Write your thoughts here..."
+                value={editNoteParagraphInput}
+                onChange={(e) => setEditNoteParagraphInput(e.target.value)}
+                rows={5}
+              />
+            </div>
+            <div className="ht-note-modal-footer">
+              <button className="ht-note-action-btn ht-note-cancel-btn" onClick={cancelEditNote}>Cancel</button>
+              <button
+                className="ht-note-action-btn ht-note-save-btn"
+                onClick={saveEditNote}
+                disabled={!editNoteTitleInput.trim() && !editNoteParagraphInput.trim()}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Date of birth modal (for Age countdown) */}
