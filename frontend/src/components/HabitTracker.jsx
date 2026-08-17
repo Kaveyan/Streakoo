@@ -1155,6 +1155,8 @@ export default function HabitTracker() {
           .ht-task-section-head { flex-wrap: wrap; }
           .ht-task { gap: 6px; padding: 7px 0; }
           .ht-habit-grid { grid-template-columns: 1fr !important; }
+          .ht-goals-shell { grid-template-columns: 1fr !important; }
+          .ht-timer-section { display: none !important; }
           .ht-stats-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
           .ht-stats-grid > div { padding: 0.85rem 1rem !important; }
           .ht-stats-grid > div > div:first-child { font-size: 11px !important; }
@@ -1508,7 +1510,7 @@ export default function HabitTracker() {
                 </div>
 
                 {/* Center: Compact timer */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <div className="ht-timer-section" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   {timerEditMode ? (
                     <input
                       autoFocus
@@ -1795,7 +1797,7 @@ export default function HabitTracker() {
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: "17px", fontWeight: 600, color: "#3B82F6" }}>Pro Tips</div>
             </div>
-            <div className="ht-goals-shell" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "8px" }}>
+            <div className="ht-goals-shell" style={{ gap: "8px" }}>
               {proTips.map((tip, idx) => {
                 const isDone = checkedProTips.includes(tip);
                 return (
