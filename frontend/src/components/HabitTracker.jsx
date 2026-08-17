@@ -1006,7 +1006,74 @@ export default function HabitTracker() {
     return (trackEntries[selectedTrack.id] || []).slice(-30).map((e) => ({ ...e, label: fmtShort(e.date) }));
   }, [selectedTrack, trackEntries]);
 
-  if (!loaded) return <div style={{ padding: "2rem", fontFamily: "Inter, sans-serif" }}>Loading…</div>;
+  if (!loaded) return (
+    <div style={{
+      position: "fixed", inset: 0,
+      background: isDark ? "#000000" : "#FAF7EF",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      fontFamily: "'Inter', sans-serif",
+      gap: "28px",
+      zIndex: 9999,
+    }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;600&display=swap');
+        @keyframes ht-spin { to { transform: rotate(360deg); } }
+        @keyframes ht-pulse { 0%,100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+        @keyframes ht-fadein { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .ht-loader-wrap { animation: ht-fadein 0.5s ease both; }
+        .ht-loader-ring { animation: ht-spin 1.1s cubic-bezier(0.55,0.15,0.45,0.85) infinite; transform-origin: center; }
+        .ht-loader-dot { width: 6px; height: 6px; border-radius: 50%; background: ${isDark ? "#A69F8C" : "#8A8672"}; animation: ht-pulse 1.4s ease-in-out infinite; }
+        .ht-loader-dot:nth-child(2) { animation-delay: 0.2s; }
+        .ht-loader-dot:nth-child(3) { animation-delay: 0.4s; }
+      `}</style>
+
+      <div className="ht-loader-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "28px" }}>
+        {/* Spinner */}
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+          <circle cx="32" cy="32" r="26" stroke={isDark ? "#2A2A2A" : "#E7E2D3"} strokeWidth="5" />
+          <path
+            className="ht-loader-ring"
+            d="M32 6 a26 26 0 0 1 26 26"
+            stroke={isDark ? "#F3F0E6" : "#3F6C51"}
+            strokeWidth="5"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </svg>
+
+        {/* App name */}
+        <div style={{ textAlign: "center" }}>
+          <div style={{
+            fontFamily: "'Fraunces', serif",
+            fontSize: "32px",
+            fontWeight: 600,
+            color: isDark ? "#F3F0E6" : "#2B2A25",
+            letterSpacing: "-0.5px",
+            lineHeight: 1,
+            marginBottom: "8px",
+          }}>
+            Streako
+          </div>
+          <div style={{
+            fontSize: "13px",
+            color: isDark ? "#A69F8C" : "#8A8672",
+            fontWeight: 400,
+            letterSpacing: "0.02em",
+          }}>
+            Getting your data ready…
+          </div>
+        </div>
+
+        {/* Pulsing dots */}
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div className="ht-loader-dot" />
+          <div className="ht-loader-dot" />
+          <div className="ht-loader-dot" />
+        </div>
+      </div>
+    </div>
+  );
 
   const themeVars = isDark
     ? {
