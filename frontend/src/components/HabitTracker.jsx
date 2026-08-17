@@ -1355,11 +1355,11 @@ export default function HabitTracker() {
               {/* Year Roadmap */}
               {(() => {
                 const yearData = {
-                  2026: { label: "₹5L", detail: "Target: ₹5 Lakh", color: "#3F6C51", age: 21 },
-                  2027: { label: "₹30L", detail: "₹25L + ₹5L = ₹30 Lakh", color: "#2E7D6B", age: 22 },
-                  2028: { label: "₹1Cr", detail: "₹70L + ₹30L = ₹1 Crore", color: "#1A6B78", age: 23 },
-                  2029: { label: "₹2Cr", detail: "₹1Cr + ₹1Cr = ₹2 Crore", color: "#155E75", age: 24 },
-                  2030: { label: "₹5Cr", detail: "₹3Cr + ₹2Cr = ₹5 Crore", color: "#0F4C81", age: 25 },
+                  2026: { label: "₹50L", detail: "Target: ₹5 Lakh", color: "#3F6C51", age: 21 },
+                  2027: { label: "₹1Cr", detail: "₹25L + ₹5L = ₹30 Lakh", color: "#2E7D6B", age: 22 },
+                  2028: { label: "₹5Cr", detail: "₹70L + ₹30L = ₹1 Crore", color: "#1A6B78", age: 23 },
+                  2029: { label: "₹10Cr", detail: "₹1Cr + ₹1Cr = ₹2 Crore", color: "#155E75", age: 24 },
+                  2030: { label: "₹30Cr", detail: "₹3Cr + ₹2Cr = ₹5 Crore", color: "#0F4C81", age: 25 },
                 };
                 const years = [2026, 2027, 2028, 2029, 2030];
                 const selected = yearData[selectedSavingYear];
