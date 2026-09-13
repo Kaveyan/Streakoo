@@ -99,10 +99,12 @@ export default function HabitTracker() {
   const [notes, setNotes] = useState([]);
   const [noteTitleInput, setNoteTitleInput] = useState("");
   const [noteParagraphInput, setNoteParagraphInput] = useState("");
+  const [noteImageInput, setNoteImageInput] = useState(null); // base64 string
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [editNoteId, setEditNoteId] = useState(null);
   const [editNoteTitleInput, setEditNoteTitleInput] = useState("");
   const [editNoteParagraphInput, setEditNoteParagraphInput] = useState("");
+  const [editNoteImageInput, setEditNoteImageInput] = useState(null); // base64 string
   const [editNoteModalOpen, setEditNoteModalOpen] = useState(false);
   const [hoveredHabitId, setHoveredHabitId] = useState(null);
 
@@ -400,6 +402,8 @@ export default function HabitTracker() {
 
   useEffect(() => {
     (async () => {
+      const minDelay = new Promise((resolve) => setTimeout(resolve, 2000));
+
       let data = {};
       try {
         const res = await storage.get(STORAGE_KEY);
@@ -434,6 +438,8 @@ export default function HabitTracker() {
       }
       setTimerSeconds(data.timerSeconds !== undefined ? data.timerSeconds : 1500);
 
+      // Wait for minimum 2s so the loading screen always shows properly
+      await minDelay;
       setLoaded(true);
     })();
   }, []);
@@ -753,17 +759,19 @@ export default function HabitTracker() {
   const addNote = () => {
     const title = noteTitleInput.trim();
     const text = noteParagraphInput.trim();
-    if (!title && !text) return;
+    if (!title && !text && !noteImageInput) return;
     const newNote = {
       id: "n_" + Date.now(),
       title,
       text,
+      image: noteImageInput || null,
       createdAt: new Date().toISOString()
     };
     const next = [newNote, ...notes];
     setNotes(next);
     setNoteTitleInput("");
     setNoteParagraphInput("");
+    setNoteImageInput(null);
     setNoteModalOpen(false);
     save({ notes: next });
   };
@@ -784,6 +792,7 @@ export default function HabitTracker() {
     setEditNoteId(note.id);
     setEditNoteTitleInput(note.title);
     setEditNoteParagraphInput(note.text);
+    setEditNoteImageInput(note.image || null);
     setEditNoteModalOpen(true);
   };
 
@@ -791,15 +800,16 @@ export default function HabitTracker() {
     if (!editNoteId) return;
     const title = editNoteTitleInput.trim();
     const text = editNoteParagraphInput.trim();
-    if (!title && !text) return;
+    if (!title && !text && !editNoteImageInput) return;
     const next = notes.map((n) =>
-      n.id === editNoteId ? { ...n, title, text, updatedAt: new Date().toISOString() } : n
+      n.id === editNoteId ? { ...n, title, text, image: editNoteImageInput || null, updatedAt: new Date().toISOString() } : n
     );
     setNotes(next);
     setEditNoteId(null);
     setEditNoteModalOpen(false);
     setEditNoteTitleInput("");
     setEditNoteParagraphInput("");
+    setEditNoteImageInput(null);
     save({ notes: next });
   };
 
@@ -808,6 +818,7 @@ export default function HabitTracker() {
     setEditNoteModalOpen(false);
     setEditNoteTitleInput("");
     setEditNoteParagraphInput("");
+    setEditNoteImageInput(null);
   };
 
   // ---------- Derived: habits ----------
@@ -1276,6 +1287,14 @@ export default function HabitTracker() {
         .ht-note-modal-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; display: block; }
         .ht-note-modal-footer { padding: 16px 20px 20px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border); margin-top: 16px; }
         .ht-note-modal-footer .ht-note-action-btn { padding: 9px 18px; font-size: 13px; }
+        .ht-note-img-uploader { position: relative; margin-top: 4px; border: 2px dashed var(--border-strong); border-radius: 10px; padding: 18px 12px; text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s; background: var(--subtle-bg); }
+        .ht-note-img-uploader:hover, .ht-note-img-uploader.drag-over { border-color: #6366F1; background: rgba(99,102,241,0.06); }
+        .ht-note-img-uploader input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+        .ht-note-img-preview { position: relative; margin-top: 4px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+        .ht-note-img-preview img { width: 100%; max-height: 220px; object-fit: cover; display: block; }
+        .ht-note-img-remove { position: absolute; top: 6px; right: 6px; border: none; border-radius: 999px; background: rgba(0,0,0,0.55); color: #fff; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1; transition: background 0.12s; }
+        .ht-note-img-remove:hover { background: rgba(183,86,60,0.85); }
+        .ht-note-card-img { width: 100%; max-height: 160px; object-fit: cover; display: block; border-radius: 0 0 8px 8px; margin-top: 6px; }
         @media (max-width: 768px) {
           .ht-notes-form-wrap { padding: 14px 14px 0; }
           .ht-notes-list { padding: 0 14px 14px; }
@@ -2396,6 +2415,9 @@ export default function HabitTracker() {
                           {note.updatedAt && " · edited"}
                         </span>
                       </div>
+                      {note.image && (
+                        <img src={note.image} alt="Note attachment" className="ht-note-card-img" />
+                      )}
                     </div>
                   </div>
                 );
@@ -2444,15 +2466,58 @@ export default function HabitTracker() {
                 placeholder="Write your thoughts here..."
                 value={noteParagraphInput}
                 onChange={(e) => setNoteParagraphInput(e.target.value)}
-                rows={5}
+                rows={4}
               />
+              <label className="ht-note-modal-label" style={{ marginTop: "12px" }}>Image</label>
+              {noteImageInput ? (
+                <div className="ht-note-img-preview">
+                  <img src={noteImageInput} alt="Note attachment" />
+                  <button className="ht-note-img-remove" onClick={() => setNoteImageInput(null)} title="Remove image">✕</button>
+                </div>
+              ) : (
+                <div
+                  className="ht-note-img-uploader"
+                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
+                  onDragLeave={(e) => e.currentTarget.classList.remove("drag-over")}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove("drag-over");
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type.startsWith("image/")) {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => setNoteImageInput(ev.target.result);
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setNoteImageInput(ev.target.result);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-muted)", marginBottom: "6px" }}>
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                    <span style={{ fontWeight: 600, color: "#6366F1" }}>Click to upload</span> or drag & drop
+                    <div style={{ opacity: 0.7, marginTop: "2px" }}>PNG, JPG, GIF, WEBP</div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="ht-note-modal-footer">
-              <button className="ht-note-action-btn ht-note-cancel-btn" onClick={() => { setNoteModalOpen(false); setNoteTitleInput(""); setNoteParagraphInput(""); }}>Cancel</button>
+              <button className="ht-note-action-btn ht-note-cancel-btn" onClick={() => { setNoteModalOpen(false); setNoteTitleInput(""); setNoteParagraphInput(""); setNoteImageInput(null); }}>Cancel</button>
               <button
                 className="ht-note-action-btn ht-note-save-btn"
                 onClick={addNote}
-                disabled={!noteTitleInput.trim() && !noteParagraphInput.trim()}
+                disabled={!noteTitleInput.trim() && !noteParagraphInput.trim() && !noteImageInput}
               >
                 Add Note
               </button>
@@ -2497,15 +2562,58 @@ export default function HabitTracker() {
                 placeholder="Write your thoughts here..."
                 value={editNoteParagraphInput}
                 onChange={(e) => setEditNoteParagraphInput(e.target.value)}
-                rows={5}
+                rows={4}
               />
+              <label className="ht-note-modal-label" style={{ marginTop: "12px" }}>Image</label>
+              {editNoteImageInput ? (
+                <div className="ht-note-img-preview">
+                  <img src={editNoteImageInput} alt="Note attachment" />
+                  <button className="ht-note-img-remove" onClick={() => setEditNoteImageInput(null)} title="Remove image">✕</button>
+                </div>
+              ) : (
+                <div
+                  className="ht-note-img-uploader"
+                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
+                  onDragLeave={(e) => e.currentTarget.classList.remove("drag-over")}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove("drag-over");
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type.startsWith("image/")) {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => setEditNoteImageInput(ev.target.result);
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setEditNoteImageInput(ev.target.result);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-muted)", marginBottom: "6px" }}>
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                    <span style={{ fontWeight: 600, color: "#6366F1" }}>Click to upload</span> or drag & drop
+                    <div style={{ opacity: 0.7, marginTop: "2px" }}>PNG, JPG, GIF, WEBP</div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="ht-note-modal-footer">
               <button className="ht-note-action-btn ht-note-cancel-btn" onClick={cancelEditNote}>Cancel</button>
               <button
                 className="ht-note-action-btn ht-note-save-btn"
                 onClick={saveEditNote}
-                disabled={!editNoteTitleInput.trim() && !editNoteParagraphInput.trim()}
+                disabled={!editNoteTitleInput.trim() && !editNoteParagraphInput.trim() && !editNoteImageInput}
               >
                 Save Changes
               </button>
